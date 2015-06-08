@@ -18,5 +18,5 @@ exports.render = ->
 		Dom.text 'Last updated: '
 		Time.deltaText (Db.shared.get('latestUpdate') || 0)
 		Dom.br()
-		Dom.text 'There are ' + (Db.shared.get('registeredPlugins') || 0 )+ ' registered' 
+		Dom.text 'There are ' + (Db.shared.get('registeredPlugins') || 0 )+ ' plugins registered' 
 
