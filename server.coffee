@@ -11,13 +11,14 @@ exports.onUpgrade = ->
 
 exports.onHttp = (request) ->
 	# special entrypoint for the Http API: called whenever a request is made to our plugin's inbound URL
-	log 'recieved onHTTP from: ' + request.data 
+	log '[onHTTP()] Plugin ' + request.data + ' registered'
 	Db.shared.set 'registered', request.data, {'updateNumber': 0, 'active': 'true', 'upToDate': 'true'}
 	request.respond 200, 'Registered successfully'
 	return 0
 
 
 exports.client_gatherHistory = ->
+	Db.shared.set 'doneCount', 0
 	Db.shared.set 'updating', 'true'
 	log '[gatherHistory()] Starting to request'
 	Db.shared.iterate 'registered' , (group) !->
@@ -40,7 +41,7 @@ exports.historyResult = (data) !->
 	if data? and data isnt ''
 		result = JSON.parse(data)
 		if result?
-			log 'Recieved history from plugin: code='+result.groupCode
+			log '[historyResult()] Recieved history from plugin: code='+result.groupCode
 			if result.groupCode? and result.groupCode isnt ''
 				Db.backend.remove 'recievedData', result.groupCode
 				Db.backend.set('recievedData', result.groupCode, 'history', result)
@@ -52,11 +53,11 @@ exports.historyResult = (data) !->
 					Db.shared.incr 'registered', result.groupCode, 'updateNumber'
 					checkUpdating()
 			else
-				log "NO groupcode!"
+				log "[historyResult()] NO groupcode!"
 		else 
-			log "JSON parsing failed!"
+			log "[historyResult()] JSON parsing failed!"
 	else
-		log 'data not available'
+		log '[historyResult()] Data not available'
 
 exports.checkRegistered = (args) ->
 	Db.shared.iterate 'registered', (group) !->
@@ -65,19 +66,25 @@ exports.checkRegistered = (args) ->
 
 checkUpdating = ->
 	done = true
+	doneCount = 0
 	Db.shared.iterate 'registered', (group) !->
 		if Db.shared.peek('registered', group.key(), 'upToDate') is 'false' and Db.shared.peek('registered', 'active') isnt 'false'
 			done = false
+		else
+			doneCount++
+	Db.shared.set 'doneCount', doneCount
 	if done
 		Db.shared.set 'updating', 'false'
 		recalculateStatistics()
 
 recalculateStatistics = ->
+	log "[recalculateStatistics()]"
 	totalPlayers = 0
 	Db.backend.iterate 'recievedData', (group) !->
-		log 'checking group '+group.key()
 		totalPlayers += parseInt(group.peek('players'))||0
 	Db.shared.set 'statistic', 'totalPlayers', totalPlayers
-	log 'registeredCount ' +  Db.shared.count('registered').peek()
-	Db.shared.set 'statistic', 'averagePlayers', totalPlayers / parseInt(Db.shared.count('registered').peek())
+	registerCount = 0
+	Db.shared.iterate 'registered', (group) !->
+		registerCount++
+	Db.shared.set 'statistic', 'averagePlayers', totalPlayers / registerCount
 	Db.shared.set 'lastStatisticUpdate', new Date()/1000
