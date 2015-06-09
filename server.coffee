@@ -1,82 +1,83 @@
 Db = require 'db'
 Http = require 'http'
+Timer = require 'timer'
 
 exports.onUpgrade = ->
 	log '[onUpgrade()] at '+new Date()
 	Db.shared.set 'lastDeploy', new Date()+''
 
+
+
+
 exports.onHttp = (request) ->
 	# special entrypoint for the Http API: called whenever a request is made to our plugin's inbound URL
 	log 'recieved onHTTP from: ' + request.data 
-	Db.backend.set 'recievedData', request.data, {'updateNumber': 0, 'lastUpdate': 0}
-	plugins = 0
-	Db.backend.iterate 'recievedData', () !->
-		plugins++
-	Db.shared.set 'registeredPlugins', plugins
+	Db.shared.set 'registered', request.data, {'updateNumber': 0, 'active': 'true', 'upToDate': 'true'}
 	request.respond 200, 'Registered successfully'
+	return 0
 
 
 exports.client_gatherHistory = ->
-	log '[gatherHistory()] Starting to request'
-	toDo = Db.shared.peek('registeredPlugins')
-	Db.shared.set 'updated', 0
 	Db.shared.set 'updating', 'true'
-	Db.backend.iterate 'recievedData' , (group) !->
-		log '  Requesting from: '+group.key()
-		Http.post 
-			url: 'https://happening.im/x/' + group.key()
-			data: '64foNwpEfn3LQrTQC2q5NijPqG92Nv2xYi65gFz6uTJjPJS2stN7MbyNygtvKvNS'
-			name: 'historyResult'
+	log '[gatherHistory()] Starting to request'
+	Db.shared.iterate 'registered' , (group) !->
+		Db.shared.set 'registered', group.key(), 'upToDate', 'false'
+		if Db.shared.peek('registered', group.key(), 'active') is 'true'
+			log '  Requesting from: '+group.key()
+			Http.post 
+				url: 'https://happening.im/x/' + group.key()
+				data: '64foNwpEfn3LQrTQC2q5NijPqG92Nv2xYi65gFz6uTJjPJS2stN7MbyNygtvKvNS'
+				name: 'historyResult'
 	log '[gatherHistory()] Done sending requests'
 	Db.shared.set('latestUpdate', new Date()/1000)
+	Timer.set 1000*30, 'checkRegistered', {}
 	return 0
 
 exports.client_updateStatistics = ->
 	recalculateStatistics()
 
 exports.historyResult = (data) !->
-	result = JSON.parse(data)
-	if result?
-		log 'Recieved history from plugin: code='+result.groupCode
-		if result.groupCode? and result.groupCode isnt ''
-			if result.groupCode is '153664d'
-				Db.shared.remove '153664d'
-			updateNumber = (Db.backend.peek('recievedData', result.groupCode, 'updateNumber')||0)+1
-			Db.backend.remove 'recievedData', result.groupCode
-			Db.backend.set('recievedData', result.groupCode, 'history', result)
-			Db.backend.remove('recievedData', result.groupCode, 'history', 'groupCode')
-			Db.backend.set('recievedData', result.groupCode, 'players', result.players)
-			Db.backend.remove('recievedData', result.groupCode, 'history', 'players')
-			Db.backend.set('recievedData', result.groupCode, 'updateNumber', updateNumber)
-			Db.backend.set('recievedData', result.groupCode, 'lastUpdate', new Date() + '')
-			updated = Db.shared.peek('updated')
-			Db.shared.incr('updated')
-			log 'updated='+updated+', will be='+(updated+1)
-			if (updated+1) is Db.shared.peek('registeredPlugins')
-				log "Received last result"
-				Db.shared.set 'updating', 'false'
-				recalculateStatistics()
-		else
-			log "NO groupcode!"
-	else 
-		log "JSON parsing failed!"
+	if data? and data isnt ''
+		result = JSON.parse(data)
+		if result?
+			log 'Recieved history from plugin: code='+result.groupCode
+			if result.groupCode? and result.groupCode isnt ''
+				Db.backend.remove 'recievedData', result.groupCode
+				Db.backend.set('recievedData', result.groupCode, 'history', result)
+				Db.backend.remove('recievedData', result.groupCode, 'history', 'groupCode')
+				Db.backend.set('recievedData', result.groupCode, 'players', result.players)
+				Db.backend.remove('recievedData', result.groupCode, 'history', 'players')
+				if Db.shared.peek('registered', result.groupCode, 'upToDate') is 'false'
+					Db.shared.set 'registered', result.groupCode, 'upToDate', 'true'
+					Db.shared.incr 'registered', result.groupCode, 'updateNumber'
+					checkUpdating()
+			else
+				log "NO groupcode!"
+		else 
+			log "JSON parsing failed!"
+	else
+		log 'data not available'
+
+exports.checkRegistered = (args) ->
+	Db.shared.iterate 'registered', (group) !->
+		if Db.shared.peek('registered', group.key(), 'upToDate') is 'false'
+			Db.shared.set 'registered', group.key(), 'active', 'false'
+
+checkUpdating = ->
+	done = true
+	Db.shared.iterate 'registered', (group) !->
+		if Db.shared.peek('registered', group.key(), 'upToDate') is 'false' and Db.shared.peek('registered', 'active') isnt 'false'
+			done = false
+	if done
+		Db.shared.set 'updating', 'false'
+		recalculateStatistics()
 
 recalculateStatistics = ->
 	totalPlayers = 0
 	Db.backend.iterate 'recievedData', (group) !->
 		log 'checking group '+group.key()
-		groupPlayers = 0
-		foundGame = false
-		group.iterate 'history', (game) !->
-			if !foundGame
-				log 'FoundGame: '+game
-				foundGame = true
-				game.iterate 'teams', (team) !->
-					log 'checking team '+team.key()
-					team.iterate 'users', (user) !->
-						log 'checking user '+user.key()
-						groupPlayers++
-		totalPlayers += groupPlayers
+		totalPlayers += parseInt(group.peek('players'))||0
 	Db.shared.set 'statistic', 'totalPlayers', totalPlayers
-	Db.shared.set 'statistic', 'averagePlayers', totalPlayers / parseInt(Db.shared.peek('registeredPlugins'))
+	log 'registeredCount ' +  Db.shared.count('registered').peek()
+	Db.shared.set 'statistic', 'averagePlayers', totalPlayers / parseInt(Db.shared.count('registered').peek())
 	Db.shared.set 'lastStatisticUpdate', new Date()/1000

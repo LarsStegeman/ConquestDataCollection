@@ -10,11 +10,17 @@ Time = require 'time'
 
 exports.render = ->
 	log "FULL RENDER"
-	Dom.text 'There are ' + (Db.shared.get('registeredPlugins') || 0 )+ ' plugins registered'
+	numberOfRegisters = (Db.shared.count('registered').get() || 0 )
+	Dom.text 'There are ' + numberOfRegisters + ' plugins registered'
 	Dom.br()
 
 	if Db.shared.get('updating')? and Db.shared.get('updating') == 'true'
-		Ui.button "Updating databases... ("+Db.shared.get('updated')+'/'+Db.shared.get('registeredPlugins')+')',  !-> 
+		counter = Obs.create(0)
+		Db.shared.iterate 'registered', (group) !->
+			log Db.shared.get('registered', group.key(), 'upToDate')
+			if Db.shared.get('registered', group.key(), 'upToDate') is 'true'
+				counter.incr()
+		Ui.button "Updating databases... ("+ counter.get() +'/'+ numberOfRegisters+')',  !-> 
 			Modal.show "Databases already updating", !->
 				Dom.div !->
 					Dom.text "The databases are already updating, wait a while until the update is finished or force update them now."
@@ -23,13 +29,11 @@ exports.render = ->
 				if choice is 'do'
 					Server.sync 'gatherHistory', !->
 						Db.shared.set 'updating', 'true'
-						Db.shared.set 'updated', 0
 			,['cancel', "Cancel", 'do', "Force update"]
 	else
 		Ui.button "Update database",  !-> 
 			Server.sync 'gatherHistory', !->
 				Db.shared.set 'updating', 'true'
-				Db.shared.set 'updated', 0
 	Dom.text 'Last updated: '
 	Time.deltaText (Db.shared.get('latestUpdate') || 0)
 	Dom.br()
