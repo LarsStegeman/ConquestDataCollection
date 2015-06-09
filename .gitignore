@@ -5,5 +5,4 @@
 *.orig
 .*.sw?
 .deploykey
-manifest
 
