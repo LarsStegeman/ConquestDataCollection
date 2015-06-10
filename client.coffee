@@ -85,13 +85,16 @@ renderGameEndCauses = !->
 	display("Reset while running: ", Db.shared.get('gamesRunning'))
 	display("Ended with winner: ", Db.shared.get('gamesEnded'))
 	Dom.div !->
-		Dom.style width: '100%', height: '20px', backgroundColor: '#CCCCCC'
+		Dom.style width: '100%', height: '20px', backgroundColor: '#CCCCCC', color: '#FFFFFF', lineHeight: '20px', textAlign: 'center', fontSize: '12px'
 		Dom.div !->
-			Dom.style display: 'inline-block', width: ((Db.shared.get('gamesSetup')/total)*100)+'%', backgroundColor: '#E84242', height: '100%'
+			Dom.style width: ((Db.shared.get('gamesSetup')/total)*100)+'%', backgroundColor: '#E84242', height: '100%', float: 'left'
+			Dom.text "setup"
 		Dom.div !->
-			Dom.style display: 'inline-block', width: ((Db.shared.get('gamesRunning')/total)*100)+'%', backgroundColor: '#FDBA3E', height: '100%'
+			Dom.style width: ((Db.shared.get('gamesRunning')/total)*100)+'%', backgroundColor: '#FDBA3E', height: '100%', float: 'left'
+			Dom.text "running"
 		Dom.div !->
-			Dom.style display: 'inline-block', width: ((Db.shared.get('gamesEnded')/total)*100)+'%', backgroundColor: '#1E981E', height: '100%'
+			Dom.style width: ((Db.shared.get('gamesEnded')/total)*100)+'%', backgroundColor: '#1E981E', height: '100%', float: 'left'
+			Dom.text "end"
 	Dom.br()
 
 renderGeneralGameEvents = !->
