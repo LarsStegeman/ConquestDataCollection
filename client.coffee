@@ -10,7 +10,7 @@ Time = require 'time'
 exports.render = ->
 	log "FULL RENDER"
 	numberOfRegisters = Db.shared.get('registeredPlugins')
-	Dom.h1 "Data updating"
+	Dom.h1 "Data info and updates"
 	Dom.div !->
 		Dom.style marginLeft: '-4px', display: 'inline-block'
 		if Db.shared.get('updating')? and Db.shared.get('updating') == 'true'
@@ -39,8 +39,21 @@ exports.render = ->
 
 	Dom.div !->
 		Dom.style marginLeft: '-4px', display: 'inline-block'
-		Ui.button "Update statistics", !->
-			Server.send 'updateStatistics'
+		if Db.shared.get('updatingStatistics')? and Db.shared.get('updatingStatistics') == 'true'
+			Ui.button "Updating statistics...", !->
+				Modal.show "Statistics already updating", !->
+					Dom.div !->
+						Dom.text "The statistics are already updating, wait a while until the update is finished or force update them now."
+						Dom.style maxWidth: '300px', textAlign: 'left'
+				, (choice)->
+					if choice is 'do'
+						Server.sync 'updateStatistics', !->
+							Db.shared.set 'updatingStatistics', 'true'
+				,['cancel', "Cancel", 'do', "Force update"]
+		else
+			Ui.button "Update statistics", !->
+				Server.sync 'updateStatistics', !->
+					Db.shared.set 'updatingStatistics', 'true'
 	Dom.div !->
 		Dom.style display: 'inline-block'
 		Dom.text 'Last updated: '
@@ -50,22 +63,53 @@ exports.render = ->
 	Dom.div !->
 		Dom.style clear: 'both'
 		Dom.text "Last deploy: "+Db.shared.get('lastDeploy')
-		Dom.br()
-		Dom.br()
+	Dom.br()
 
 	renderGeneralNumbers()
+	renderGameEndCauses()
+	renderGeneralGameEvents()
 
 renderGeneralNumbers = !->
 	Dom.h1 "General numbers"
-	displayResult("Number of plugins: ", Db.shared.get('registeredPlugins'))
-	displayResult("Total number of players: ", Db.shared.get('statistic', 'totalPlayers'))
-	displayResult("Average number of players: ", Db.shared.get('statistic', 'averagePlayers'))
-
-displayResult = (text, result) !->
-	Dom.div !->
-		Dom.text text
-		Dom.style minWidth: '200px', float: 'left'
-	Dom.text result
+	display("Plugins: ", Db.shared.get('registeredPlugins'))
+	display("Players: ", Db.shared.get('totalPlayers'))
+	displayRound("Average players: ", Db.shared.get('averagePlayers'))
+	display("Games: ", Db.shared.get('totalGames'))
 	Dom.br()
 
+renderGameEndCauses = !->
+	Dom.h1 "Game end causes"
+	total = Db.shared.get('totalGames')
+	display("Games: ", total)
+	display("Reset in setup: ", Db.shared.get('gamesSetup'))
+	display("Reset while running: ", Db.shared.get('gamesRunning'))
+	display("Ended with winner: ", Db.shared.get('gamesEnded'))
+	Dom.div !->
+		Dom.style width: '100%', height: '20px', backgroundColor: '#CCCCCC'
+		Dom.div !->
+			Dom.style display: 'inline-block', width: ((Db.shared.get('gamesSetup')/total)*100)+'%', backgroundColor: '#E84242', height: '100%'
+		Dom.div !->
+			Dom.style display: 'inline-block', width: ((Db.shared.get('gamesRunning')/total)*100)+'%', backgroundColor: '#FDBA3E', height: '100%'
+		Dom.div !->
+			Dom.style display: 'inline-block', width: ((Db.shared.get('gamesEnded')/total)*100)+'%', backgroundColor: '#1E981E', height: '100%'
+	Dom.br()
 
+renderGeneralGameEvents = !->
+	Dom.h1 "General game events"
+	display("Events: ", Db.shared.get('totalEvents'))
+	displayRound("Events/game: ", Db.shared.get('totalEvents')/Db.shared.get('totalGames'))
+	display("Captures: ", Db.shared.get('totalCaptures'))
+	displayRound("Captures/game: ", Db.shared.get('totalCaptures')/Db.shared.get('totalGames'))
+	display("Neutralizes: ", Db.shared.get('totalNeutralizes'))
+	displayRound("Neutralizes/game: ", Db.shared.get('totalNeutralizes')/Db.shared.get('totalGames'))
+	Dom.br()
+
+# ========== Functions ==========
+display = (text, result) !->
+	Dom.div !->
+		Dom.text text
+		Dom.style minWidth: '180px', float: 'left'
+	Dom.text result
+	Dom.br()
+displayRound = (text, result) !->
+	display(text, Math.round(result*1000)/1000)

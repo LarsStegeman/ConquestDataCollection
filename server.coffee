@@ -27,7 +27,7 @@ exports.client_gatherHistory = ->
 				data: '64foNwpEfn3LQrTQC2q5NijPqG92Nv2xYi65gFz6uTJjPJS2stN7MbyNygtvKvNS'
 				name: 'historyResult'
 	log '[gatherHistory()] Done sending requests'
-	Timer.set 1000*30, 'checkRegistered', {}
+	Timer.set 30*1000, 'checkRegistered', {}
 	return 0
 
 exports.client_updateStatistics = ->
@@ -72,7 +72,9 @@ checkUpdating = ->
 	if done
 		Db.shared.set('latestUpdate', new Date()/1000)
 		Db.shared.set 'updating', 'false'
+		Timer.cancel 'checkRegistered', {}
 		recalculateStatistics()
+
 
 updateNumberOfPlugins = ->
 	numberOfRegisters = 0
@@ -83,9 +85,63 @@ updateNumberOfPlugins = ->
 # Statistic calculations
 recalculateStatistics = ->
 	log "[recalculateStatistics()]"
+	Db.shared.set('updatingStatistics', 'true')
+
+	# Set general numbers
 	totalPlayers = 0
 	Db.backend.iterate 'recievedData', (group) !->
 		totalPlayers += parseInt(group.peek('players'))||0
-	Db.shared.set 'statistic', 'totalPlayers', totalPlayers
-	Db.shared.set 'statistic', 'averagePlayers', totalPlayers / parseInt(Db.shared.peek('registeredPlugins'))
+	Db.shared.set 'totalPlayers', totalPlayers
+	Db.shared.set 'averagePlayers', totalPlayers / parseInt(Db.shared.peek('registeredPlugins'))
+
+	# Initialize statistics
+	totalEvents = 0
+	totalCaptures = 0
+	totalNeutralizes = 0
+	totalGames = 0
+	endedSetup = 0
+	endedRunning = 0
+	endedProper = 0
+	# THE BIG LOOP
+	Db.backend.iterate 'recievedData', (group) !->
+		group.iterate 'history', (game) !->
+			# Game statistics
+			totalGames++
+			gameState = game.peek('gameState')
+			if gameState?
+				if gameState == 0
+					endedSetup++
+				else if gameState == 1
+					endedRunning++
+				else if gameState ==2
+					endedProper++
+			# Team statistics
+			game.iterate 'game', 'teams', (team) !->
+				neutralized = team.peek('neutralized')
+				if neutralized?
+					totalNeutralizes += neutralized
+			# Eventlist statistics
+			game.iterate 'game', 'eventlist', (gameEvent) !->
+				totalEvents++
+				if gameEvent.key() isnt 'maxId' 
+					type = gameEvent.peek('type')
+					if type == 'capture'
+						totalCaptures++
+					else if type == 'captureAll'
+						totalCaptures++ 
+	# Game statistics
+	Db.shared.set('gamesSetup', endedSetup)
+	Db.shared.set('gamesRunning', endedRunning)
+	Db.shared.set('gamesEnded', endedProper)
+	# Team statistics
+	Db.shared.set('totalNeutralizes', totalNeutralizes)
+	# Eventlist statistics
+	Db.shared.set('totalGames', totalGames)
+	Db.shared.set('totalCaptures', totalCaptures)
+	Db.shared.set('totalEvents', totalEvents)
+
+
+	# Update to current time, will only update if above went okey
 	Db.shared.set 'lastStatisticUpdate', new Date()/1000
+	Db.shared.set('updatingStatistics', 'false')
+
