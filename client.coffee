@@ -7,12 +7,9 @@ Server = require 'server'
 Ui = require 'ui'
 Time = require 'time'
 
-
 exports.render = ->
 	log "FULL RENDER"
-	numberOfRegisters = 0
-	Db.shared.iterate 'registered', (group) !->
-		numberOfRegisters++
+	numberOfRegisters = Db.shared.get('registeredPlugins')
 	Dom.h1 "Data updating"
 	Dom.div !->
 		Dom.style marginLeft: '-4px', display: 'inline-block'
@@ -34,16 +31,21 @@ exports.render = ->
 				Server.sync 'gatherHistory', !->
 					Db.shared.set 'updating', 'true'
 					Db.shared.set 'doneCount', 0
-	Dom.text 'Last updated: '
-	Time.deltaText (Db.shared.get('latestUpdate') || 0)
+	Dom.div !->
+		Dom.style display: 'inline-block'
+		Dom.text 'Last updated: '
+		Time.deltaText (Db.shared.get('latestUpdate') || 0)
 	Dom.br()
 
 	Dom.div !->
 		Dom.style marginLeft: '-4px', display: 'inline-block'
 		Ui.button "Update statistics", !->
 			Server.send 'updateStatistics'
-	Dom.text 'Last updated: '
-	Time.deltaText (Db.shared.get('lastStatisticUpdate') || 0)
+	Dom.div !->
+		Dom.style display: 'inline-block'
+		Dom.text 'Last updated: '
+		Time.deltaText (Db.shared.get('lastStatisticUpdate') || 0)
+	Dom.br()
 
 	Dom.div !->
 		Dom.style clear: 'both'
@@ -51,16 +53,13 @@ exports.render = ->
 		Dom.br()
 		Dom.br()
 
-	renderMembersPerHappening()
+	renderGeneralNumbers()
 
-renderMembersPerHappening = !->
+renderGeneralNumbers = !->
 	Dom.h1 "General numbers"
-	numberOfRegisters = 0
-	Db.shared.iterate 'registered', (group) !->
-		numberOfRegisters++
-	displayResult("Registered plugins: ", numberOfRegisters)
-	displayResult("Total players in all games: ", Db.shared.get('statistic', 'totalPlayers'))
-	displayResult("Average players: ", Db.shared.get('statistic', 'averagePlayers'))
+	displayResult("Number of plugins: ", Db.shared.get('registeredPlugins'))
+	displayResult("Total number of players: ", Db.shared.get('statistic', 'totalPlayers'))
+	displayResult("Average number of players: ", Db.shared.get('statistic', 'averagePlayers'))
 
 displayResult = (text, result) !->
 	Dom.div !->
