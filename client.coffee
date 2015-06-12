@@ -9,7 +9,7 @@ Time = require 'time'
 
 exports.render = ->
 	log "FULL RENDER"
-	numberOfRegisters = Db.shared.get('registeredPlugins')
+	numberOfRegisters = Db.shared.get('registeredPlugins')-Db.shared.get('removedPlugins')
 	Dom.h1 "Data info and updates"
 	Dom.div !->
 		Dom.style marginLeft: '-4px', display: 'inline-block'
@@ -72,6 +72,7 @@ exports.render = ->
 renderGeneralNumbers = !->
 	Dom.h1 "General numbers"
 	display("Plugins: ", Db.shared.get('registeredPlugins'))
+	display("Removed plugins: ", Db.shared.get('removedPlugins'))
 	display("Players: ", Db.shared.get('totalPlayers'))
 	displayRound("Average players: ", Db.shared.get('averagePlayers'))
 	display("Games: ", Db.shared.get('totalGames'))

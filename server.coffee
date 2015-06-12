@@ -15,6 +15,7 @@ exports.onHttp = (request) ->
 	return 0
 
 exports.client_gatherHistory = ->
+	Timer.cancel 'checkRegistered', {}
 	Db.shared.set 'doneCount', 0
 	Db.shared.set 'updating', 'true'
 	log '[gatherHistory()] Starting to request'
@@ -27,7 +28,7 @@ exports.client_gatherHistory = ->
 				data: '64foNwpEfn3LQrTQC2q5NijPqG92Nv2xYi65gFz6uTJjPJS2stN7MbyNygtvKvNS'
 				name: 'historyResult'
 	log '[gatherHistory()] Done sending requests'
-	Timer.set 30*1000, 'checkRegistered', {}
+	Timer.set 120*1000, 'checkRegistered', {}
 	return 0
 
 exports.client_updateStatistics = ->
@@ -59,22 +60,23 @@ exports.checkRegistered = (args) ->
 	Db.backend.iterate 'pluginInfo', (group) !->
 		if Db.backend.peek('pluginInfo', group.key(), 'upToDate') is 'false'
 			Db.backend.set 'pluginInfo', group.key(), 'active', 'false'
+	Db.shared.set 'updating', 'false'
 
 checkUpdating = ->
 	done = true
 	doneCount = 0
 	Db.backend.iterate 'pluginInfo', (group) !->
-		if Db.backend.peek('pluginInfo', group.key(), 'upToDate') is 'false' and Db.backend.peek('pluginInfo', 'active') isnt 'false'
-			done = false
-		else
-			doneCount++
+		if Db.backend.peek('pluginInfo', group.key(), 'active') isnt 'false'
+			if Db.backend.peek('pluginInfo', group.key(), 'upToDate') is 'false'
+				done = false
+			else
+				doneCount++
 	Db.shared.set 'doneCount', doneCount
 	if done
 		Db.shared.set('latestUpdate', new Date()/1000)
 		Db.shared.set 'updating', 'false'
 		Timer.cancel 'checkRegistered', {}
 		recalculateStatistics()
-
 
 updateNumberOfPlugins = ->
 	numberOfRegisters = 0
@@ -102,8 +104,11 @@ recalculateStatistics = ->
 	endedSetup = 0
 	endedRunning = 0
 	endedProper = 0
+	inactive = 0
 	# THE BIG LOOP
 	Db.backend.iterate 'recievedData', (group) !->
+		if Db.backend.peek('pluginInfo', group.key(), 'active') is 'false'
+			inactive++
 		group.iterate 'history', (game) !->
 			# Game statistics
 			totalGames++
@@ -133,6 +138,7 @@ recalculateStatistics = ->
 	Db.shared.set('gamesSetup', endedSetup)
 	Db.shared.set('gamesRunning', endedRunning)
 	Db.shared.set('gamesEnded', endedProper)
+	Db.shared.set('removedPlugins', inactive)
 	# Team statistics
 	Db.shared.set('totalNeutralizes', totalNeutralizes)
 	# Eventlist statistics
