@@ -10,7 +10,7 @@ Time = require 'time'
 exports.render = ->
 	log "FULL RENDER"
 	numberOfRegisters = Db.shared.get('registeredPlugins')-Db.shared.get('removedPlugins')
-	Dom.h1 "Data info and updates"
+	Dom.h2 "Data info and updates"
 	Dom.div !->
 		Dom.style marginLeft: '-4px', display: 'inline-block'
 		if Db.shared.get('updating')? and Db.shared.get('updating') == 'true'
@@ -70,7 +70,7 @@ exports.render = ->
 	renderGeneralGameEvents()
 
 renderGeneralNumbers = !->
-	Dom.h1 "General numbers"
+	Dom.h2 "General numbers"
 	display("Plugins: ", Db.shared.get('registeredPlugins'))
 	display("Removed plugins: ", Db.shared.get('removedPlugins'))
 	display("Players: ", Db.shared.get('totalPlayers'))
@@ -79,7 +79,7 @@ renderGeneralNumbers = !->
 	Dom.br()
 
 renderGameEndCauses = !->
-	Dom.h1 "Game end causes"
+	Dom.h2 "Game end causes"
 	total = Db.shared.get('totalGames')
 	display("Games: ", total)
 	display("Reset in setup: ", Db.shared.get('gamesSetup'))
@@ -99,7 +99,7 @@ renderGameEndCauses = !->
 	Dom.br()
 
 renderGeneralGameEvents = !->
-	Dom.h1 "General game events"
+	Dom.h2 "General game events"
 	display("Events: ", Db.shared.get('totalEvents'))
 	displayRound("Events/game: ", Db.shared.get('totalEvents')/Db.shared.get('totalGames'))
 	display("Captures: ", Db.shared.get('totalCaptures'))
