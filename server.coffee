@@ -5,6 +5,7 @@ Timer = require 'timer'
 Config = {
 		updateCompletionDelay: 500				# milliseconds between updating the doneCount for the client while gathering data
 		gatheringTimeout: 120*1000				# timeout of the gathering (time after receiving last result) non-updated plugins will be marked as inactive after this
+		gatherRequestsPerSecond: 10				# how many HTTP data gather requests will be send each second
 	}
 
 # Upgrade of the plugin
@@ -22,25 +23,44 @@ exports.onHttp = (request) ->
 	return 0
 
 # Client call to update databases
-exports.client_gatherHistory = ->
+exports.client_gatherHistory = ->	
+	log '[gatherHistory()] Starting to request'
 	Timer.cancel 'gatheringTimeout', {}
 	Timer.cancel 'updateCompletion', {}
 	Db.shared.set 'doneCount', 0
 	Db.shared.set 'lastDoneCount', 0
 	Db.shared.set 'updating', 'true'
-	log '[gatherHistory()] Starting to request'
-	Db.backend.iterate 'pluginInfo' , (group) !->
-		Db.backend.set 'pluginInfo', group.key(), 'upToDate', 'false'
-		if Db.backend.peek('pluginInfo', group.key(), 'active') is 'true'
-			log '  Requesting from: '+group.key()
-			Http.post 
-				url: 'https://happening.im/x/' + group.key()
-				data: '64foNwpEfn3LQrTQC2q5NijPqG92Nv2xYi65gFz6uTJjPJS2stN7MbyNygtvKvNS'
-				name: 'historyResult'
-	log '[gatherHistory()] Done sending requests'
+	Db.backend.set 'pluginInfoCopy', Db.backend.peek('pluginInfo')
+	currentRequest = 0
+	Db.backend.iterate 'pluginInfoCopy' , (group) !->
+		Db.backend.set 'pluginInfoCopy', group.key(), 'upToDate', 'false'
+		currentRequest++
+	Db.shared.set 'currentRequest', currentRequest
+	Timer.set 0, 'doGatherStep', {}
 	Timer.set Config.gatheringTimeout, 'gatheringTimeout', {}
 	Timer.set Config.updateCompletionDelay, 'updateCompletion', {}
 	return 0
+
+exports.doGatherStep = (args) ->
+	current = 0
+	currentRequest = Db.shared.peek('currentRequest')
+	Db.backend.iterate 'pluginInfoCopy' , (group) !->
+		if current >= currentRequest and current < (currentRequest+Config.gatherRequestsPerSecond)
+			if Db.backend.peek('pluginInfoCopy', group.key(), 'active') is 'true'
+				log '  Requesting from: '+group.key()
+				Http.post 
+					url: 'https://happening.im/x/' + group.key()
+					data: '64foNwpEfn3LQrTQC2q5NijPqG92Nv2xYi65gFz6uTJjPJS2stN7MbyNygtvKvNS'
+					name: 'historyResult'
+		current++
+	currentRequest = currentRequest-Config.gatherRequestsPerSecond
+	Db.shared.set 'currentRequest', currentRequest
+	if currentRequest > 0
+		Timer.set 1000, 'doGatherStep', {}
+	else
+		log '[doGatherStep()] Done sending requests'
+	return 0
+
 
 # Client call for updating statistics
 exports.client_updateStatistics = ->
@@ -50,9 +70,9 @@ exports.client_updateStatistics = ->
 exports.updateCompletion = (args) ->
 	done = true
 	doneCount = 0
-	Db.backend.iterate 'pluginInfo', (group) !->
-		if Db.backend.peek('pluginInfo', group.key(), 'active') isnt 'false'
-			if Db.backend.peek('pluginInfo', group.key(), 'upToDate') is 'false'
+	Db.backend.iterate 'pluginInfoCopy', (group) !->
+		if Db.backend.peek('pluginInfoCopy', group.key(), 'active') isnt 'false'
+			if Db.backend.peek('pluginInfoCopy', group.key(), 'upToDate') is 'false'
 				done = false
 			else
 				doneCount++
@@ -72,6 +92,7 @@ finishGathering = ->
 	Timer.cancel 'updateCompletion', {}
 	Db.shared.set('latestUpdate', new Date()/1000)
 	Db.shared.set 'updating', 'false'
+	Db.backend.remove 'pluginInfoCopy'
 	recalculateStatistics()
 
 # A callback result from a Conquest plugin after asked for database
@@ -86,8 +107,8 @@ exports.historyResult = (data) !->
 				Db.backend.remove('recievedData', result.groupCode, 'history', 'groupCode')
 				Db.backend.set('recievedData', result.groupCode, 'players', result.players)
 				Db.backend.remove('recievedData', result.groupCode, 'history', 'players')
-				if Db.backend.peek('pluginInfo', result.groupCode, 'upToDate') is 'false'
-					Db.backend.set 'pluginInfo', result.groupCode, 'upToDate', 'true'
+				if Db.backend.peek('pluginInfoCopy', result.groupCode, 'upToDate') is 'false'
+					Db.backend.set 'pluginInfoCopy', result.groupCode, 'upToDate', 'true'
 					Db.backend.incr 'pluginInfo', result.groupCode, 'updateNumber'
 			else
 				log "[historyResult()] NO groupcode!"
@@ -98,9 +119,9 @@ exports.historyResult = (data) !->
 
 # Triggers when not all plugins responded in time, sets plugins to inactive
 exports.gatheringTimeout = (args) ->
-	Db.backend.iterate 'pluginInfo', (group) !->
-		if Db.backend.peek('pluginInfo', group.key(), 'upToDate') is 'false'
-			Db.backend.set 'pluginInfo', group.key(), 'active', 'false'
+	#Db.backend.iterate 'pluginInfo', (group) !-> TODO reenable
+	#	if Db.backend.peek('pluginInfo', group.key(), 'upToDate') is 'false'
+	#		Db.backend.set 'pluginInfo', group.key(), 'active', 'false'
 	finishGathering()
 
 # Update number of plugins registered
@@ -144,7 +165,7 @@ recalculateStatistics = ->
 					endedSetup++
 				else if gameState == 1
 					endedRunning++
-				else if gameState ==2
+				else if gameState == 2
 					endedProper++
 			# Team statistics
 			game.iterate 'game', 'teams', (team) !->
