@@ -2,10 +2,17 @@ Db = require 'db'
 Http = require 'http'
 Timer = require 'timer'
 
+Config = {
+		updateCompletionDelay: 500				# milliseconds between updating the doneCount for the client while gathering data
+		gatheringTimeout: 120*1000				# timeout of the gathering (time after receiving last result) non-updated plugins will be marked as inactive after this
+	}
+
+# Upgrade of the plugin
 exports.onUpgrade = ->
 	log '[onUpgrade()] at '+new Date()
 	Db.shared.set 'lastDeploy', new Date()+''
 
+# Call from Conquest plugin for registering itself to this Data plugin
 exports.onHttp = (request) ->
 	# special entrypoint for the Http API: called whenever a request is made to our plugin's inbound URL
 	log '[onHTTP()] Plugin ' + request.data + ' registered'
@@ -14,9 +21,12 @@ exports.onHttp = (request) ->
 	updateNumberOfPlugins()
 	return 0
 
+# Client call to update databases
 exports.client_gatherHistory = ->
-	Timer.cancel 'checkRegistered', {}
+	Timer.cancel 'gatheringTimeout', {}
+	Timer.cancel 'updateCompletion', {}
 	Db.shared.set 'doneCount', 0
+	Db.shared.set 'lastDoneCount', 0
 	Db.shared.set 'updating', 'true'
 	log '[gatherHistory()] Starting to request'
 	Db.backend.iterate 'pluginInfo' , (group) !->
@@ -28,12 +38,43 @@ exports.client_gatherHistory = ->
 				data: '64foNwpEfn3LQrTQC2q5NijPqG92Nv2xYi65gFz6uTJjPJS2stN7MbyNygtvKvNS'
 				name: 'historyResult'
 	log '[gatherHistory()] Done sending requests'
-	Timer.set 120*1000, 'checkRegistered', {}
+	Timer.set Config.gatheringTimeout, 'gatheringTimeout', {}
+	Timer.set Config.updateCompletionDelay, 'updateCompletion', {}
 	return 0
 
+# Client call for updating statistics
 exports.client_updateStatistics = ->
 	recalculateStatistics()
 
+# Update the donecount to be shown to the client, finishes the gathering if done
+exports.updateCompletion = (args) ->
+	done = true
+	doneCount = 0
+	Db.backend.iterate 'pluginInfo', (group) !->
+		if Db.backend.peek('pluginInfo', group.key(), 'active') isnt 'false'
+			if Db.backend.peek('pluginInfo', group.key(), 'upToDate') is 'false'
+				done = false
+			else
+				doneCount++
+	Db.shared.set 'doneCount', doneCount
+	if done
+		finishGathering()
+	else
+		if Db.shared.peek('lastDoneCount') != doneCount
+			Timer.cancel 'gatheringTimeout', {}
+			Timer.set Config.gatheringTimeout, 'gatheringTimeout', {}
+		Timer.set Config.updateCompletionDelay, 'updateCompletion', {}
+		Db.shared.set 'lastDoneCount', doneCount
+
+# End the gathring, trigger statistics update
+finishGathering = ->
+	Timer.cancel 'gatheringTimeout', {}
+	Timer.cancel 'updateCompletion', {}
+	Db.shared.set('latestUpdate', new Date()/1000)
+	Db.shared.set 'updating', 'false'
+	recalculateStatistics()
+
+# A callback result from a Conquest plugin after asked for database
 exports.historyResult = (data) !->
 	if data? and data isnt ''
 		result = JSON.parse(data)
@@ -48,7 +89,6 @@ exports.historyResult = (data) !->
 				if Db.backend.peek('pluginInfo', result.groupCode, 'upToDate') is 'false'
 					Db.backend.set 'pluginInfo', result.groupCode, 'upToDate', 'true'
 					Db.backend.incr 'pluginInfo', result.groupCode, 'updateNumber'
-					checkUpdating()
 			else
 				log "[historyResult()] NO groupcode!"
 		else 
@@ -56,28 +96,14 @@ exports.historyResult = (data) !->
 	else
 		log '[historyResult()] Data not available'
 
-exports.checkRegistered = (args) ->
+# Triggers when not all plugins responded in time, sets plugins to inactive
+exports.gatheringTimeout = (args) ->
 	Db.backend.iterate 'pluginInfo', (group) !->
 		if Db.backend.peek('pluginInfo', group.key(), 'upToDate') is 'false'
 			Db.backend.set 'pluginInfo', group.key(), 'active', 'false'
-	Db.shared.set 'updating', 'false'
+	finishGathering()
 
-checkUpdating = ->
-	done = true
-	doneCount = 0
-	Db.backend.iterate 'pluginInfo', (group) !->
-		if Db.backend.peek('pluginInfo', group.key(), 'active') isnt 'false'
-			if Db.backend.peek('pluginInfo', group.key(), 'upToDate') is 'false'
-				done = false
-			else
-				doneCount++
-	Db.shared.set 'doneCount', doneCount
-	if done
-		Db.shared.set('latestUpdate', new Date()/1000)
-		Db.shared.set 'updating', 'false'
-		Timer.cancel 'checkRegistered', {}
-		recalculateStatistics()
-
+# Update number of plugins registered
 updateNumberOfPlugins = ->
 	numberOfRegisters = 0
 	Db.backend.iterate 'pluginInfo', () !->
