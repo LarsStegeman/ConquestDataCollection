@@ -7,6 +7,10 @@ Server = require 'server'
 Ui = require 'ui'
 Time = require 'time'
 
+Config = {
+		startTimestamp: 1434405600.0			# Timestamp which is used as day 0 for the statistics
+	}
+
 exports.render = ->
 	log "FULL RENDER"
 	numberOfRegisters = Db.shared.get('registeredPlugins')-Db.shared.get('removedPlugins')
@@ -109,6 +113,21 @@ renderGeneralGameEvents = !->
 	display("Neutralizes: ", Db.shared.get('totalNeutralizes'))
 	displayRound("Neutralizes/game: ", Db.shared.get('totalNeutralizes')/Db.shared.get('totalGames'))
 	Dom.br()
+	Dom.h2 'Captures per day'
+	maxEvents=0
+	Db.shared.iterate 'eventsPerDay', (day) !->
+		if day.peek() > maxEvents
+			maxEvents = day.peek()
+	Dom.div !->
+		Db.shared.iterate 'eventsPerDay', (day) !->
+			Dom.div !->
+				d = new Date((Config.startTimestamp+ day.key()*86400)*1000)
+				Dom.text d.getDate() + '-' + d.getMonth() + '-' + d.getFullYear()
+			Dom.div !->
+				Dom.style width: (day.get()/maxEvents*100) + '%',height: '20px', backgroundColor: '#1E981E',  color: '#FFFFFF', textAlign: 'right', fontSize: '12px', paddingRight: '7px', lineHeight: '20px'
+				Dom.style _boxSizing: 'border-box'
+				Dom.text day.get()
+
 
 # ========== Functions ==========
 display = (text, result) !->

@@ -5,8 +5,11 @@ Timer = require 'timer'
 Config = {
 		updateCompletionDelay: 500				# milliseconds between updating the doneCount for the client while gathering data
 		gatheringTimeout: 120*1000				# timeout of the gathering (time after receiving last result) non-updated plugins will be marked as inactive after this
-		gatherRequestsPerSecond: 10				# how many HTTP data gather requests will be send each second
+		gatherRequestsPerSecond: 100			# how many HTTP data gather requests will be send each second
+		startTimestamp: 1434405600.0			# Timestamp which is used as day 0 for the statistics
 	}
+
+eventsPerDay = {}
 
 # Upgrade of the plugin
 exports.onUpgrade = ->
@@ -156,6 +159,8 @@ recalculateStatistics = ->
 	endedRunning = 0
 	endedProper = 0
 	inactive = 0
+	Db.shared.remove('eventsPerDay')
+	eventsPerDay = {}
 	# THE BIG LOOP
 	Db.backend.iterate 'recievedData', (group) !->
 		if Db.backend.peek('pluginInfo', group.key(), 'active') is 'false'
@@ -183,8 +188,10 @@ recalculateStatistics = ->
 					type = gameEvent.peek('type')
 					if type == 'capture'
 						totalCaptures++
+						timestampToDay(gameEvent.peek('timestamp'))
 					else if type == 'captureAll'
 						totalCaptures++ 
+						timestampToDay(gameEvent.peek('timestamp'))
 	# Game statistics
 	Db.shared.set('gamesSetup', endedSetup)
 	Db.shared.set('gamesRunning', endedRunning)
@@ -197,8 +204,25 @@ recalculateStatistics = ->
 	Db.shared.set('totalCaptures', totalCaptures)
 	Db.shared.set('totalEvents', totalEvents)
 
+	#Update number of events per day
+	for day, number of eventsPerDay
+		if day? and number? and day >= 0 
+			Db.shared.set('eventsPerDay', day, number)
+
+
 
 	# Update to current time, will only update if above went okey
 	Db.shared.set 'lastStatisticUpdate', new Date()/1000
 	Db.shared.set('updatingStatistics', 'false')
 
+
+timestampToDay = (timestamp) ->
+	if timestamp?
+		timestamp = timestamp - Config.startTimestamp
+		days = Math.floor(Math.round(timestamp) / 86400) + ''
+		events = eventsPerDay[days]
+		if events isnt undefined and events? and events isnt null
+			eventsPerDay[days] = events+1
+		else
+			eventsPerDay[days] = 1
+	return 0
