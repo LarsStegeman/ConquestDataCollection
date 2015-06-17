@@ -10,6 +10,7 @@ Config = {
 	}
 
 eventsPerDay = {}
+groupsPerGroupSize = {}
 
 # Upgrade of the plugin
 exports.onUpgrade = ->
@@ -145,12 +146,6 @@ recalculateStatistics = ->
 
 	# Set general numbers
 	totalPlayers = 0
-	Db.backend.iterate 'recievedData', (group) !->
-		totalPlayers += parseInt(group.peek('players'))||0
-	Db.shared.set 'totalPlayers', totalPlayers
-	Db.shared.set 'averagePlayers', totalPlayers / parseInt(Db.shared.peek('registeredPlugins'))
-
-	# Initialize statistics
 	totalEvents = 0
 	totalCaptures = 0
 	totalNeutralizes = 0
@@ -161,8 +156,18 @@ recalculateStatistics = ->
 	inactive = 0
 	Db.shared.remove('eventsPerDay')
 	eventsPerDay = {}
+	groupsPerGroupSize = {}
 	# THE BIG LOOP
 	Db.backend.iterate 'recievedData', (group) !->
+		players = group.peek('players')
+		if players?
+			players = parseInt(players)
+			totalPlayers += players
+			playersString = players + ''
+			if groupsPerGroupSize[playersString]?
+				groupsPerGroupSize[playersString] = groupsPerGroupSize[playersString]+1
+			else
+				groupsPerGroupSize[playersString] = 1
 		if Db.backend.peek('pluginInfo', group.key(), 'active') is 'false'
 			inactive++
 		group.iterate 'history', (game) !->
@@ -192,6 +197,9 @@ recalculateStatistics = ->
 					else if type == 'captureAll'
 						totalCaptures++ 
 						timestampToDay(gameEvent.peek('timestamp'))
+	# General statistics
+	Db.shared.set 'totalPlayers', totalPlayers
+	Db.shared.set 'averagePlayers', totalPlayers / parseInt(Db.shared.peek('registeredPlugins'))
 	# Game statistics
 	Db.shared.set('gamesSetup', endedSetup)
 	Db.shared.set('gamesRunning', endedRunning)
@@ -204,10 +212,14 @@ recalculateStatistics = ->
 	Db.shared.set('totalCaptures', totalCaptures)
 	Db.shared.set('totalEvents', totalEvents)
 
-	#Update number of events per day
+	# Update number of events per day
 	for day, number of eventsPerDay
 		if day? and number? and day >= 0 
 			Db.shared.set('eventsPerDay', day, number)
+	# Update groups per groupsize
+	for groupsize, count of groupsPerGroupSize
+		if groupsize? and count?
+			Db.shared.set('groupsPerGroupSize', groupsize, count)
 
 
 
