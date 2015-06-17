@@ -30,11 +30,14 @@ exports.client_gatherHistory = ->
 	Db.shared.set 'doneCount', 0
 	Db.shared.set 'lastDoneCount', 0
 	Db.shared.set 'updating', 'true'
+	Db.shared.set "doneSendingRequests", 'no'
 	Db.backend.set 'pluginInfoCopy', Db.backend.peek('pluginInfo')
 	currentRequest = 0
-	Db.backend.iterate 'pluginInfoCopy' , (group) !->
-		Db.backend.set 'pluginInfoCopy', group.key(), 'upToDate', 'false'
-		currentRequest++
+	Db.backend.iterate 'pluginInfo' , (group) !->
+		if group.peek('active') == 'true'
+			Db.backend.set 'pluginInfoCopy', group.key(), Db.backend.peek('pluginInfo', group.key())
+			Db.backend.set 'pluginInfoCopy', group.key(), 'upToDate', 'false'
+			currentRequest++
 	Db.shared.set 'currentRequest', currentRequest
 	Timer.set 0, 'doGatherStep', {}
 	Timer.set Config.gatheringTimeout, 'gatheringTimeout', {}
@@ -46,18 +49,18 @@ exports.doGatherStep = (args) ->
 	currentRequest = Db.shared.peek('currentRequest')
 	Db.backend.iterate 'pluginInfoCopy' , (group) !->
 		if current >= currentRequest and current < (currentRequest+Config.gatherRequestsPerSecond)
-			if Db.backend.peek('pluginInfoCopy', group.key(), 'active') is 'true'
-				log '  Requesting from: '+group.key()
-				Http.post 
-					url: 'https://happening.im/x/' + group.key()
-					data: '64foNwpEfn3LQrTQC2q5NijPqG92Nv2xYi65gFz6uTJjPJS2stN7MbyNygtvKvNS'
-					name: 'historyResult'
+			log '  Requesting from: '+group.key()
+			Http.post
+				url: 'https://happening.im/x/' + group.key()
+				data: '64foNwpEfn3LQrTQC2q5NijPqG92Nv2xYi65gFz6uTJjPJS2stN7MbyNygtvKvNS'
+				name: 'historyResult'
 		current++
 	currentRequest = currentRequest-Config.gatherRequestsPerSecond
 	Db.shared.set 'currentRequest', currentRequest
 	if currentRequest > 0
 		Timer.set 1000, 'doGatherStep', {}
 	else
+		Db.shared.set "doneSendingRequests", 'yes'
 		log '[doGatherStep()] Done sending requests'
 	return 0
 
@@ -71,11 +74,10 @@ exports.updateCompletion = (args) ->
 	done = true
 	doneCount = 0
 	Db.backend.iterate 'pluginInfoCopy', (group) !->
-		if Db.backend.peek('pluginInfoCopy', group.key(), 'active') isnt 'false'
-			if Db.backend.peek('pluginInfoCopy', group.key(), 'upToDate') is 'false'
-				done = false
-			else
-				doneCount++
+		if Db.backend.peek('pluginInfoCopy', group.key(), 'upToDate') is 'false'
+			done = false
+		else
+			doneCount++
 	Db.shared.set 'doneCount', doneCount
 	if done
 		finishGathering()
@@ -95,27 +97,29 @@ finishGathering = ->
 	Db.backend.remove 'pluginInfoCopy'
 	recalculateStatistics()
 
-# A callback result from a Conquest plugin after asked for database
 exports.historyResult = (data) !->
 	if data? and data isnt ''
-		result = JSON.parse(data)
-		if result?
-			log '[historyResult()] Recieved history from plugin: code='+result.groupCode
-			if result.groupCode? and result.groupCode isnt ''
-				Db.backend.remove 'recievedData', result.groupCode
-				Db.backend.set('recievedData', result.groupCode, 'history', result)
-				Db.backend.remove('recievedData', result.groupCode, 'history', 'groupCode')
-				Db.backend.set('recievedData', result.groupCode, 'players', result.players)
-				Db.backend.remove('recievedData', result.groupCode, 'history', 'players')
-				if Db.backend.peek('pluginInfoCopy', result.groupCode, 'upToDate') is 'false'
-					Db.backend.set 'pluginInfoCopy', result.groupCode, 'upToDate', 'true'
-					Db.backend.incr 'pluginInfo', result.groupCode, 'updateNumber'
-			else
-				log "[historyResult()] NO groupcode!"
-		else 
-			log "[historyResult()] JSON parsing failed!"
+		if data.indexOf("<html><head><title>404 no such group app</title></head>") <= -1
+			result = JSON.parse(data)
+			if result?
+				log '[historyResult()] Recieved history from plugin: code='+result.groupCode
+				if result.groupCode? and result.groupCode isnt ''
+					Db.backend.remove 'recievedData', result.groupCode
+					Db.backend.set('recievedData', result.groupCode, 'history', result)
+					Db.backend.remove('recievedData', result.groupCode, 'history', 'groupCode')
+					Db.backend.set('recievedData', result.groupCode, 'players', result.players)
+					Db.backend.remove('recievedData', result.groupCode, 'history', 'players')
+					if Db.backend.peek('pluginInfoCopy', result.groupCode, 'upToDate') is 'false'
+						Db.backend.set 'pluginInfoCopy', result.groupCode, 'upToDate', 'true'
+						Db.backend.incr 'pluginInfo', result.groupCode, 'updateNumber'
+				else
+					log "[historyResult()] NO groupcode!"
+			else 
+				log "[historyResult()] JSON parsing failed!"
+		else
+			log "[historyResult()] Group app not found!"
 	else
-		log '[historyResult()] Data not available'
+		log '[historyResult()] Data not available!'
 
 # Triggers when not all plugins responded in time, sets plugins to inactive
 exports.gatheringTimeout = (args) ->

@@ -26,6 +26,8 @@ exports.render = ->
 							Db.shared.set 'updating', 'true'
 							Db.shared.set 'doneCount', 0
 				,['cancel', "Cancel", 'do', "Force update"]
+			Dom.text "Done sending requests: "+Db.shared.get('doneSendingRequests')
+			Dom.br()
 		else
 			Ui.button "Update database", !-> 
 				Server.sync 'gatherHistory', !->
