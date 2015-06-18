@@ -22,6 +22,10 @@ exports.render = ->
 	Dom.br()
 
 renderUpdateInfo = !->
+	# Cause full update when databases get or statistics updated
+	Db.shared.get('latestUpdate')
+	Db.shared.get('lastStatisticUpdate')
+
 	Obs.observe ->
 		Dom.h2 "Data info and updates"
 		Dom.div !->
@@ -29,7 +33,13 @@ renderUpdateInfo = !->
 			Dom.style marginLeft: '-4px', display: 'inline-block'
 			if Db.shared.get('updating')? and Db.shared.get('updating') == 'true'
 				doneCount = Db.shared.get('doneCount')
-				Ui.button "Updating... (" + doneCount + "/" + numberOfRegisters + ")", !-> 
+				buttonText = ""
+				if Db.shared.get('doneSendingRequests') == 'no'
+					buttonText = "Updating"
+				else
+					buttonText = "Waiting"
+				buttonText += "... (" + doneCount + "/" + numberOfRegisters + ")"
+				Ui.button buttonText, !-> 
 					Modal.show "Databases already updating", !->
 						Dom.div !->
 							Dom.text "The databases are already updating, wait a while until the update is finished or force update them now."
@@ -40,8 +50,6 @@ renderUpdateInfo = !->
 								Db.shared.set 'updating', 'true'
 								Db.shared.set 'doneCount', 0
 					,['cancel', "Cancel", 'do', "Force update"]
-				Dom.text "Done sending requests: "+Db.shared.get('doneSendingRequests')
-				Dom.br()
 			else
 				Ui.button "Update database", !-> 
 					Server.sync 'gatherHistory', !->
