@@ -154,8 +154,12 @@ recalculateStatistics = ->
 	endedRunning = 0
 	endedProper = 0
 	inactive = 0
+	beacons = 0
+	validBounds = 0
+	boundsTotalX = 0
+	boundsTotalY = 0
 	Db.shared.remove('eventsPerDay')
-	#allLatLng = ''
+	#allLatLng = '' # lat/lng string
 	eventsPerDay = {}
 	groupsPerGroupSize = {}
 	# THE BIG LOOP
@@ -198,15 +202,36 @@ recalculateStatistics = ->
 					else if type == 'captureAll'
 						totalCaptures++ 
 						timestampToDay(gameEvent.peek('timestamp'))
-			#Create beacon string
-	#		game.iterate 'game', 'beacons', (beacon) !->
-	#			allLatLng += beacon.peek('location', 'lat') + ',' + beacon.peek('location', 'lng') + ';'
-	#Db.shared.set 'allLatLng', allLatLng
+			# Beacon statistics
+			game.iterate 'game', 'beacons', (beacon) !->
+				if gameState == 1 or gameState == 2
+					beacons++
+				#allLatLng += beacon.peek('location', 'lat') + ',' + beacon.peek('location', 'lng') + ';' # lat/lng string
+			if gameState == 1 or gameState == 2
+				lat1 = game.peek('game', 'bounds', 'one', 'lat')
+				lat2 = game.peek('game', 'bounds', 'two', 'lat')
+				lng1 = game.peek('game', 'bounds', 'one', 'lng')
+				lng2 = game.peek('game', 'bounds', 'two', 'lng')
+				if lat1? and lat2? and lng1? and lng2?
+					validBounds++
+					distY = distance(lat1, lng1, lat2, lng1)
+					if distY? and distY != NaN
+						boundsTotalY += distY
+					distX = distance(lat1, lng1, lat1, lng2)
+					if distX? and distX != NaN
+						boundsTotalX += distX
 
+	
+	# Beacon statistics
+	Db.shared.set('beacons', beacons)
+	Db.shared.set('validBounds', validBounds)
+	Db.shared.set('boundsX', boundsTotalX/validBounds)
+	Db.shared.set('boundsY', boundsTotalY/validBounds)
+	#Db.shared.set 'allLatLng', allLatLng # lat/lng string
 
 	# General statistics
-	Db.shared.set 'totalPlayers', totalPlayers
-	Db.shared.set 'averagePlayers', totalPlayers / parseInt(Db.shared.peek('registeredPlugins'))
+	Db.shared.set('totalPlayers', totalPlayers)
+	Db.shared.set('averagePlayers', totalPlayers / parseInt(Db.shared.peek('registeredPlugins')))
 	# Game statistics
 	Db.shared.set('gamesSetup', endedSetup)
 	Db.shared.set('gamesRunning', endedRunning)
@@ -234,7 +259,7 @@ recalculateStatistics = ->
 	Db.shared.set 'lastStatisticUpdate', new Date()/1000
 	Db.shared.set('updatingStatistics', 'false')
 
-
+# Add one point to the captures for the day of the timestamp
 timestampToDay = (timestamp) ->
 	if timestamp?
 		timestamp = timestamp - Config.startTimestamp
@@ -245,3 +270,12 @@ timestampToDay = (timestamp) ->
 		else
 			eventsPerDay[days] = 1
 	return 0
+
+# Calculate distance
+distance = (inputLat1, inputLng1, inputLat2, inputLng2) ->
+	r = 6378137
+	rad = 3.141592653589793 / 180
+	lat1 = inputLat1 * rad
+	lat2 = inputLat2 * rad
+	a = Math.sin(lat1) * Math.sin(lat2) + Math.cos(lat1) * Math.cos(lat2) * Math.cos((inputLng2 - inputLng1) * rad);
+	return r * Math.acos(Math.min(a, 1));

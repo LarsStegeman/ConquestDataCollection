@@ -14,9 +14,10 @@ Config = {
 exports.render = ->
 	log "FULL RENDER"
 	renderUpdateInfo()
-	renderGeneralNumbers()
+	renderGeneral()
 	renderGameEndCauses()
 	renderGeneralGameEvents()
+	renderGameSetup()
 	renderCapturesPerDay()
 	renderGroupsPerGroupsize()
 	Dom.br()
@@ -89,9 +90,9 @@ renderUpdateInfo = !->
 			Dom.text "Last deploy: "+Db.shared.get('lastDeploy')
 		Dom.br()
 
-renderGeneralNumbers = !->
+renderGeneral = !->
 	Obs.observe ->
-		Dom.h2 "General numbers"
+		Dom.h2 "General"
 		display("Plugins: ", Db.shared.get('registeredPlugins'))
 		display("Removed plugins: ", Db.shared.get('removedPlugins'))
 		display("Players: ", Db.shared.get('totalPlayers'))
@@ -103,20 +104,19 @@ renderGameEndCauses = !->
 	Obs.observe ->
 		Dom.h2 "Game end causes"
 		total = Db.shared.get('totalGames')
-		display("Games: ", total)
 		display("Reset in setup: ", Db.shared.get('gamesSetup'))
 		display("Reset while running: ", Db.shared.get('gamesRunning'))
 		display("Ended with winner: ", Db.shared.get('gamesEnded'))
 		Dom.div !->
 			Dom.style width: '100%', height: '20px', backgroundColor: '#CCCCCC', color: '#FFFFFF', lineHeight: '20px', textAlign: 'center', fontSize: '12px'
 			Dom.div !->
-				Dom.style width: ((Db.shared.get('gamesSetup')/total)*100)+'%', backgroundColor: '#E84242', height: '100%', float: 'left'
+				Dom.style width: ((Db.shared.get('gamesSetup')/total)*100)+'%', backgroundColor: '#E84242', height: '100%', float: 'left', textShadow: '0 0 3px rgba(0,0,0,0.9)'
 				Dom.text "setup"
 			Dom.div !->
-				Dom.style width: ((Db.shared.get('gamesRunning')/total)*100)+'%', backgroundColor: '#FDBA3E', height: '100%', float: 'left'
+				Dom.style width: ((Db.shared.get('gamesRunning')/total)*100)+'%', backgroundColor: '#FDBA3E', height: '100%', float: 'left', textShadow: '0 0 3px rgba(0,0,0,0.9)'
 				Dom.text "running"
 			Dom.div !->
-				Dom.style width: ((Db.shared.get('gamesEnded')/total)*100)+'%', backgroundColor: '#1E981E', height: '100%', float: 'left'
+				Dom.style width: ((Db.shared.get('gamesEnded')/total)*100)+'%', backgroundColor: '#1E981E', height: '100%', float: 'left', textShadow: '0 0 3px rgba(0,0,0,0.9)'
 				Dom.text "end"
 		Dom.br()
 
@@ -151,7 +151,7 @@ renderCapturesPerDay = !->
 			Dom.style width: 'auto', right: '8px', left: '100px', position: 'absolute'		
 			Db.shared.iterate 'eventsPerDay', (day) !->
 				Dom.div !->
-					Dom.style width: (day.get()/maxEvents*100) + '%',height: '20px', backgroundColor: '#1E981E',  color: '#FFFFFF', textAlign: 'right', fontSize: '12px', paddingRight: '7px', lineHeight: '20px', marginBottom: '3px'
+					Dom.style width: (day.get()/maxEvents*100) + '%',height: '20px', backgroundColor: '#1E981E',  color: '#FFFFFF', textAlign: 'right', fontSize: '12px', paddingRight: '7px', lineHeight: '20px', marginBottom: '3px', textShadow: '0 0 3px rgba(0,0,0,0.9)'
 					Dom.style _boxSizing: 'border-box'
 					Dom.text day.get()
 		Dom.div !->
@@ -180,11 +180,29 @@ renderGroupsPerGroupsize = !->
 			Dom.style width: 'auto', right: '8px', left: '100px', position: 'absolute'
 			for key in keys
 				Dom.div !->
-					Dom.style width: (Db.shared.get('groupsPerGroupSize', key+'')/maxCount*100) + '%',height: '20px', backgroundColor: '#0077cf',  color: '#FFFFFF', textAlign: 'right', fontSize: '12px', paddingRight: '7px', lineHeight: '20px', marginBottom: '3px'
+					Dom.style width: (Db.shared.get('groupsPerGroupSize', key+'')/maxCount*100) + '%',height: '20px', backgroundColor: '#0077cf',  color: '#FFFFFF', textAlign: 'right', fontSize: '12px', paddingRight: '7px', lineHeight: '20px', marginBottom: '3px', textShadow: '0 0 3px rgba(0,0,0,0.9)'
 					Dom.style _boxSizing: 'border-box'
 					Dom.text Db.shared.get('groupsPerGroupSize', key+'')
 		Dom.div !->
 			Dom.style marginBottom: (rows*23) + 'px'
+		Dom.br()
+
+renderGameSetup = !->
+	Obs.observe ->
+		Dom.h2 'Game setup'
+		display("Beacons", Db.shared.get('beacons'))
+		displayRound("Average beacons", Db.shared.get('beacons') / (Db.shared.get('gamesRunning') + Db.shared.get('gamesEnded')))
+		display("Valid bounds", Db.shared.get('validBounds'))
+		x = Db.shared.get('boundsX')
+		y = Db.shared.get('boundsY')
+		if x >= 1000
+			displayRoundSuffix("Average play width", x/1000, 'km')
+		else
+			displayRoundSuffix("Average play width", x, 'm')
+		if y >= 1000
+			displayRoundSuffix("Average play width", y/1000, 'km')
+		else
+			displayRoundSuffix("Average play width", y, 'm')
 		Dom.br()
 
 
@@ -197,3 +215,5 @@ display = (text, result) !->
 	Dom.br()
 displayRound = (text, result) !->
 	display(text, Math.round(result*1000)/1000)
+displayRoundSuffix = (text, result, suffix) !->
+	display(text, (Math.round(result*1000)/1000) + suffix)
