@@ -155,6 +155,7 @@ recalculateStatistics = ->
 	endedProper = 0
 	inactive = 0
 	Db.shared.remove('eventsPerDay')
+	#allLatLng = ''
 	eventsPerDay = {}
 	groupsPerGroupSize = {}
 	# THE BIG LOOP
@@ -197,6 +198,12 @@ recalculateStatistics = ->
 					else if type == 'captureAll'
 						totalCaptures++ 
 						timestampToDay(gameEvent.peek('timestamp'))
+			#Create beacon string
+	#		game.iterate 'game', 'beacons', (beacon) !->
+	#			allLatLng += beacon.peek('location', 'lat') + ',' + beacon.peek('location', 'lng') + ';'
+	#Db.shared.set 'allLatLng', allLatLng
+
+
 	# General statistics
 	Db.shared.set 'totalPlayers', totalPlayers
 	Db.shared.set 'averagePlayers', totalPlayers / parseInt(Db.shared.peek('registeredPlugins'))
