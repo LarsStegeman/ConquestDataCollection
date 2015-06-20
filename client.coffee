@@ -200,9 +200,9 @@ renderGameSetup = !->
 		else
 			displayRoundSuffix("Average play width", x, 'm')
 		if y >= 1000
-			displayRoundSuffix("Average play width", y/1000, 'km')
+			displayRoundSuffix("Average play height", y/1000, 'km')
 		else
-			displayRoundSuffix("Average play width", y, 'm')
+			displayRoundSuffix("Average play height", y, 'm')
 		Dom.br()
 
 
