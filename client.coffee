@@ -147,6 +147,8 @@ renderCapturesPerDay = !->
 					d = new Date((Config.startTimestamp+ day.key()*86400)*1000)
 					Dom.text d.getDate() + '-' + d.getMonth() + '-' + d.getFullYear()
 					Dom.style height: '20px', lineHeight: '20px', marginBottom: '3px'
+			, (day) ->
+				parseInt(day.key())
 		Dom.div !->
 			Dom.style width: 'auto', right: '8px', left: '100px', position: 'absolute'		
 			Db.shared.iterate 'eventsPerDay', (day) !->
@@ -154,9 +156,12 @@ renderCapturesPerDay = !->
 					Dom.style width: (day.get()/maxEvents*100) + '%',height: '20px', backgroundColor: '#1E981E',  color: '#FFFFFF', textAlign: 'right', fontSize: '12px', paddingRight: '7px', lineHeight: '20px', marginBottom: '3px', textShadow: '0 0 3px rgba(0,0,0,0.9)'
 					Dom.style _boxSizing: 'border-box'
 					Dom.text day.get()
+			, (day) ->
+				parseInt(day.key())
 		Dom.div !->
 			Dom.style marginBottom: (rows*23) + 'px'
 		Dom.br()
+
 
 renderGroupsPerGroupsize = !->
 	Obs.observe ->
